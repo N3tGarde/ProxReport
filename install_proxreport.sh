@@ -20,6 +20,23 @@ echo "  Instalación: $INSTALL_DIR"
 echo "  Configuración: $CONFIG_DIR"
 echo
 
+### COMPROBACIÓN DE INSTALACIÓN EXISTENTE ###
+if [[ -d "$INSTALL_DIR/.git" ]] \
+   && [[ -f "$CONFIG_DIR/config.ini" ]] \
+   && [[ -f "$CONFIG_DIR/users.txt" ]] \
+   && [[ -f "/etc/systemd/system/$SERVICE_NAME.service" ]] \
+   && systemctl is-active --quiet "$SERVICE_NAME"; then
+
+  info "ProxReport ya está instalado y en ejecución."
+  echo "Instalación:   $INSTALL_DIR"
+  echo "Configuración: $CONFIG_DIR"
+  echo "Servicio:      $SERVICE_NAME (activo)"
+  echo
+  echo "No se realizará ninguna acción."
+  echo "Si desea reinstalar, elimine primero la instalación existente."
+  exit 0
+fi
+
 ### DEPENDENCIAS ###
 dependencies=(git python3 openssl)
 for cmd in "${dependencies[@]}"; do
@@ -76,32 +93,12 @@ if [[ "$TLS_ASK" =~ ^[Yy]$ ]]; then
 fi
 
 ### Crear Cuenta ###
-info "Configurando usuario..."
-
-if [[ -f "$CONFIG_DIR/users.txt" ]]; then
-    if grep -q "^${ADMIN_USER}:" "$CONFIG_DIR/users.txt"; then
-        warn "El usuario '$ADMIN_USER' ya existe."
-        read -rp "¿Desea sobrescribir su contraseña? [y/N]: " overwrite
-        [[ "$overwrite" =~ ^[Yy]$ ]] || {
-            info "Usuario no modificado."
-            goto_systemd=true
-        }
-        if [[ "$overwrite" =~ ^[Yy]$ ]]; then
-            info "Actualizando contraseña del usuario '$ADMIN_USER'..."
-            TMP_USERS="$(mktemp)"
-            grep -v "^${ADMIN_USER}:" "$CONFIG_DIR/users.txt" > "$TMP_USERS"
-            PYTHONPATH="$INSTALL_DIR" "$PYTHON_BIN" -m proxreport hash-password --username "$ADMIN_USER" >> "$TMP_USERS"
-            mv "$TMP_USERS" "$CONFIG_DIR/users.txt"
-        fi
-    else
-        info "Añadiendo nuevo usuario '$ADMIN_USER'..."
-        PYTHONPATH="$INSTALL_DIR" "$PYTHON_BIN" -m proxreport hash-password --username "$ADMIN_USER" >> "$CONFIG_DIR/users.txt"
-    fi
-else
-    info "Creando archivo de usuarios..."
-    PYTHONPATH="$INSTALL_DIR" "$PYTHON_BIN" -m proxreport hash-password --username "$ADMIN_USER" > "$CONFIG_DIR/users.txt"
-fi
-
+info "Crear usuario para el dashboard"
+read -rp "Nombre de usuario: " ADMIN_USER
+ADMIN_USER=${ADMIN_USER:-admin}
+info "Introduzca la contraseña:"
+PYTHONPATH="$INSTALL_DIR" "$PYTHON_BIN" -m proxreport hash-password --username "$ADMIN_USER" > "$CONFIG_DIR/users.txt"
+info "Creando usuario..."
 chmod 600 "$CONFIG_DIR/users.txt"
 
 ### SYSTEMD ###
@@ -111,5 +108,6 @@ systemctl daemon-reload
 systemctl enable --now "$SERVICE_NAME"
 
 info "Instalación completada 🎉"
-echo "Acceso HTTPS según config.ini"
+echo "URL: https://$(hostname):<PUERTO>"
+echo "Config: $CONFIG_DIR/config.ini"
 echo "Logs: journalctl -u $SERVICE_NAME -f"
