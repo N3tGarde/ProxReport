@@ -57,14 +57,14 @@ def render_dashboard(cfg: AppConfig, snap: HostSnapshot) -> str:
   <meta charset=\"utf-8\">
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
   <meta http-equiv=\"refresh\" content=\"{auto}\">
-  <title>{html.escape(snap.hostname)} - ProxReport</title>
+  <title>ProxReport - {html.escape(snap.hostname)}</title>
   <link rel=\"stylesheet\" href=\"/static/style.css\">
 </head>
 <body>
   <div class=\"container\">
     <div class=\"header\">
       <div>
-        <h1>{html.escape(snap.hostname)} — ProxReport</h1>
+        <h1>ProxReport — {html.escape(snap.hostname)}</h1>
         <div class=\"small\">Updated {html.escape(updated)} · Auto-refresh {auto}s · Uptime {html.escape(uptime_str)}</div>
       </div>
       <div class=\"small\">Load: <code>{html.escape(load_str)}</code> · CPUs: <code>{snap.cpu_count}</code></div>
