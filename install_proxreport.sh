@@ -87,8 +87,8 @@ if [[ "$TLS_ASK" =~ ^[Yy]$ ]]; then
 fi
 
 ### USUARIO ADMIN ###
-info "Creando usuario admin personalizado..."
-PYTHONPATH="$INSTALL_DIR" "$PYTHON_BIN" -m proxreport hash-password --username "$ADMIN_USER" > "$CONFIG_DIR/users.txt"
+info "Creando usuario..."
+printf "%s\n" "$ADMIN_PASS" | PYTHONPATH="$INSTALL_DIR" "$PYTHON_BIN" -m proxreport hash-password --username "$ADMIN_USER" > "$CONFIG_DIR/users.txt"
 chmod 600 "$CONFIG_DIR/users.txt"
 
 ### SYSTEMD ###
