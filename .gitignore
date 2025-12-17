@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+
+# Local config/secrets
+config.ini
+users.txt
+*.pem
+*.key
+*.crt
+*.csr
+
+# Editors/OS
+.DS_Store
+.idea/
+.vscode/
