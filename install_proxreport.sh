@@ -36,10 +36,7 @@ for cmd in "${dependencies[@]}"; do
     fi
 done
 
-### Usuario admin personalizado ###
-read -rp "Nombre de usuario admin [admin]: " ADMIN_USER
-ADMIN_USER=${ADMIN_USER:-admin}
-
+### Crear Certificado TLS ###
 read -rp "¿Generar TLS autofirmado? [Y/n]: " TLS_ASK
 TLS_ASK=${TLS_ASK:-Y}
 
@@ -77,7 +74,10 @@ if [[ "$TLS_ASK" =~ ^[Yy]$ ]]; then
   fi
 fi
 
-### USUARIO ADMIN ###
+
+### Crear Usuario ###
+read -rp "Nombre de usuario admin [admin]: " ADMIN_USER
+ADMIN_USER=${ADMIN_USER:-admin}
 info "Creando usuario..."
 PYTHONPATH="$INSTALL_DIR" "$PYTHON_BIN" -m proxreport hash-password --username "$ADMIN_USER" > "$CONFIG_DIR/users.txt"
 chmod 600 "$CONFIG_DIR/users.txt"
