@@ -1,69 +1,106 @@
 #!/usr/bin/env bash
 set -e
 
-[[ $EUID -ne 0 ]] && echo "Run as root" && exit 1
-
+### VARIABLES POR DEFECTO ###
 REPO_URL="https://github.com/N3tGarde/proxreport.git"
-INSTALL_DIR="/opt/proxreport"
-CONFIG_DIR="/etc/proxreport"
-SERVICE_FILE="/etc/systemd/system/proxreport.service"
+DEFAULT_INSTALL_DIR="/opt/proxreport"
+DEFAULT_CONFIG_DIR="/etc/proxreport"
+SERVICE_NAME="proxreport"
+PYTHON_BIN="/usr/bin/python3"
 
-echo "=== ProxReport Installer ==="
-echo
+info() { echo -e "\033[1;34m[INFO]\033[0m $1"; }
+warn() { echo -e "\033[1;33m[WARN]\033[0m $1"; }
+err()  { echo -e "\033[1;31m[ERROR]\033[0m $1"; exit 1; }
 
-read -rp "Puerto HTTP (default 8080): " HTTP_PORT
-HTTP_PORT=${HTTP_PORT:-8080}
+### CHECK ROOT ###
+[[ $EUID -ne 0 ]] && err "Debe ejecutarse como root"
 
-read -rp "Puerto HTTPS (default 8443): " HTTPS_PORT
-HTTPS_PORT=${HTTPS_PORT:-8443}
+### DEPENDENCIAS ###
+dependencies=(git python3 openssl)
+for cmd in "${dependencies[@]}"; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        warn "$cmd no está instalado."
+        read -rp "¿Desea instalar $cmd ahora? [Y/n]: " install_dep
+        install_dep=${install_dep:-Y}
+        if [[ "$install_dep" =~ ^[Yy]$ ]]; then
+            info "Instalando $cmd..."
+            apt update && apt install -y "$cmd"
+        else
+            err "$cmd es obligatorio para continuar."
+        fi
+    fi
+done
 
-read -rp "Do you want to use 80/443? [y/N]: " USE_PRIV
-USE_PRIV=${USE_PRIV,,}
+### INTERACTIVO ###
+read -rp "Directorio de instalación [$DEFAULT_INSTALL_DIR]: " INSTALL_DIR
+INSTALL_DIR=${INSTALL_DIR:-$DEFAULT_INSTALL_DIR}
 
-### Repo
-if [[ ! -d $INSTALL_DIR ]]; then
+read -rp "Directorio de configuración [$DEFAULT_CONFIG_DIR]: " CONFIG_DIR
+CONFIG_DIR=${CONFIG_DIR:-$DEFAULT_CONFIG_DIR}
+
+### Usuario admin personalizado ###
+read -rp "Nombre de usuario admin [admin]: " ADMIN_USER
+ADMIN_USER=${ADMIN_USER:-admin}
+
+while true; do
+  read -rsp "Contraseña de admin: " ADMIN_PASS
+  echo
+  read -rsp "Confirmar contraseña: " ADMIN_PASS2
+  echo
+  [[ "$ADMIN_PASS" == "$ADMIN_PASS2" ]] && break
+  echo "⚠️ Las contraseñas no coinciden, intenta nuevamente."
+done
+
+read -rp "¿Generar TLS autofirmado? [Y/n]: " TLS_ASK
+TLS_ASK=${TLS_ASK:-Y}
+
+### CLONAR O ACTUALIZAR REPO ###
+if [[ -d "$INSTALL_DIR/.git" ]]; then
+  info "Repositorio existente, actualizando..."
+  git -C "$INSTALL_DIR" pull
+else
+  info "Clonando repositorio..."
   git clone "$REPO_URL" "$INSTALL_DIR"
 else
   git -C "$INSTALL_DIR" pull
 fi
 
+### DIRECTORIOS ###
 mkdir -p "$CONFIG_DIR/tls"
 
-### TLS
-if [[ ! -f "$CONFIG_DIR/tls/cert.pem" ]]; then
-  openssl req -x509 -newkey rsa:2048 -nodes \
-    -keyout "$CONFIG_DIR/tls/key.pem" \
-    -out "$CONFIG_DIR/tls/cert.pem" \
-    -days 365 \
-    -subj "/CN=$(hostname)"
-fi
-
-### Config
+### CONFIG.INI ###
 if [[ ! -f "$CONFIG_DIR/config.ini" ]]; then
+  info "Creando config.ini"
   cp "$INSTALL_DIR/config.example.ini" "$CONFIG_DIR/config.ini"
-  sed -i \
-    -e "s/^http_port.*/http_port = $HTTP_PORT/" \
-    -e "s/^https_port.*/https_port = $HTTPS_PORT/" \
-    "$CONFIG_DIR/config.ini"
+else
+  warn "config.ini ya existe, no se sobrescribirá"
 fi
 
-### User
-if [[ ! -f "$CONFIG_DIR/users.txt" ]]; then
-  echo "Creating admin user"
-  python3 -m proxreport hash-password --username admin > "$CONFIG_DIR/users.txt"
-  chmod 600 "$CONFIG_DIR/users.txt"
+### TLS ###
+if [[ "$TLS_ASK" =~ ^[Yy]$ ]]; then
+  if [[ ! -f "$CONFIG_DIR/tls/cert.pem" ]]; then
+    info "Generando certificado TLS autofirmado"
+    openssl req -x509 -newkey rsa:2048 -nodes \
+      -keyout "$CONFIG_DIR/tls/key.pem" \
+      -out "$CONFIG_DIR/tls/cert.pem" \
+      -days 365 \
+      -subj "/CN=$(hostname)"
+  else
+    warn "Certificados TLS ya existen"
+  fi
 fi
 
-### Systemd
-cp "$INSTALL_DIR/systemd/proxreport.service" "$SERVICE_FILE"
+### USUARIO ADMIN ###
+info "Creando usuario admin personalizado..."
+echo -n "$ADMIN_PASS" | "$PYTHON_BIN" -m proxreport hash-password --username "$ADMIN_USER" > "$CONFIG_DIR/users.txt"
+chmod 600 "$CONFIG_DIR/users.txt"
 
-if [[ "$USE_PRIV" != "y" ]]; then
-  sed -i '/CAP_NET_BIND_SERVICE/d' "$SERVICE_FILE"
-fi
-
+### SYSTEMD ###
+info "Instalando servicio systemd"
+cp "$INSTALL_DIR/systemd/proxreport.service" /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now proxreport
+systemctl enable --now "$SERVICE_NAME"
 
-echo
-echo "✔ Installation ProxReport completed"
-echo "URL: https://$(hostname):$HTTPS_PORT"
+info "Instalación completada 🎉"
+echo "Acceso HTTPS según config.ini"
+echo "Logs: journalctl -u $SERVICE_NAME -f"
