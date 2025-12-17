@@ -1,4 +1,4 @@
-# proxreport
+# ProxReport
 Lightweight, self-hosted, one-page dashboard for a Proxmox VE node.
 
 Goals:
