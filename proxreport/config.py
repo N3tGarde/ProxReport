@@ -69,9 +69,15 @@ def _getstr(cp: configparser.ConfigParser, section: str, key: str, default: str)
 
 
 def _get_mountpoints(cp: configparser.ConfigParser) -> tuple[str, ...]:
+    mode = _getstr(cp, "storage", "mode", "mountpoints").lower()
+
+    if mode == "total":
+        return ("__TOTAL__",)
+
     raw = _getstr(cp, "storage", "mountpoints", "/")
     parts = [p.strip() for p in raw.split(",") if p.strip()]
     return tuple(parts) if parts else ("/",)
+
 
 
 def load_config(path: str) -> AppConfig:

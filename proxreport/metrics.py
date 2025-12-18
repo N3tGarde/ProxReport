@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import time
 from typing import Optional, Tuple
+import subprocess
 
 
 @dataclass(frozen=True)
@@ -78,7 +79,10 @@ def snapshot(mountpoints: Tuple[str, ...]) -> HostSnapshot:
         pass
 
     mem_total_kb, mem_avail_kb = _read_meminfo()
-    disks = tuple(_disk_stat(mp) for mp in mountpoints)
+    if mountpoints == ("__TOTAL__",):
+        disks = (_disk_stat_total(),)
+    else:
+        disks = tuple(_disk_stat(mp) for mp in mountpoints)
 
     return HostSnapshot(
         hostname=hostname,
@@ -153,3 +157,30 @@ def _disk_stat(mountpoint: str) -> DiskStat:
         used_bytes=int(used),
         free_bytes=int(free),
     )
+
+def _disk_stat_total() -> DiskStat:
+    """
+    Aggregate total disk usage using `df --total`.
+    This matches Proxmox node-wide storage behavior.
+    """
+    out = subprocess.check_output(
+        ["df", "-B1", "--total"],
+        text=True
+    ).splitlines()
+
+    for line in out:
+        if line.startswith("total"):
+            parts = line.split()
+            total = int(parts[1])
+            used = int(parts[2])
+            free = int(parts[3])
+
+            return DiskStat(
+                mountpoint="TOTAL",
+                total_bytes=total,
+                used_bytes=used,
+                free_bytes=free,
+            )
+
+    raise RuntimeError("Unable to parse df --total output")
+
